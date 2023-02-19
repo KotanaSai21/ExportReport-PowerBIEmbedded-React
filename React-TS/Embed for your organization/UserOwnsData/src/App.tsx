@@ -17,6 +17,8 @@ let embedUrl = "";
 let reportContainer: HTMLElement;
 let reportRef: React.Ref<HTMLDivElement>;
 let loading: JSX.Element;
+let status: string;
+let percentComplete;
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 interface AppProps { };
@@ -260,6 +262,106 @@ class App extends React.Component<AppProps, AppState> {
         const welcome = document.getElementById("welcome");
         if (welcome !== null)
             welcome.innerText = "Welcome, " + username;
+    }
+
+    exportReport() {
+        const settings = {
+            format: 'PDF',
+            powerBIReportConfiguration: {
+                defaultBookmark: {
+                        //    state: capturedBookmark.state
+                                }            }
+        };
+
+        fetch(`https://api.powerbi.com/v1.0/myorg/reports/${config.reportId}/ExportTo` ,
+            {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + accessToken,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ format: "pdf"})
+            })
+            .then(response => response.json() )
+            .then(data => {
+
+            const exportId = data.id;
+            const intervalId = setInterval(async () => {
+                // Check the status of the export
+                this.checkExportStatus(config.reportId,exportId);
+
+                // Update the progress percentage
+                // percentComplete = exportStatus.percentComplete === 0 ? 1 : exportStatus.percentComplete;                // console.log("Inside if",exportStatus.percentComplete)                
+                if (status === 'Succeeded') {
+                  // If the export succeeded, download the exported file and reset the interval                  console.log("if passed calling download")
+                  this.downloadExportedFile(config.reportId,exportId);
+
+                  clearInterval(intervalId);
+                } else if (status !== 'Running') {
+                  // If the export failed or is in an unknown state, reset the interval with an error message                  console.log("else failed")
+                  clearInterval(intervalId);
+                }
+            }, 60);
+            // Set a timeout to reset the interval in case the export takes too long
+            setTimeout(() => {
+                clearInterval(intervalId);
+            }, 300000);
+
+        }).catch(error => {
+            console.error('Error:', error);
+        });
+    }
+
+   checkExportStatus(reportId:any, exportId: string) {
+        try {
+            fetch(`https://api.powerbi.com/v1.0/myorg/reports/${reportId}/exports/${exportId}`,
+            {
+                headers: {
+                    "Authorization": "Bearer " + accessToken,
+                    'Content-Type': 'application/json'
+                },
+            }).then(response => response.json())
+            .then( data => {
+              // Do something with the JSON response data
+              percentComplete= data.percentComplete;
+              status = data.status;
+            }).catch(error => {
+              console.error(error);
+            });
+        } catch (error) {
+            console.log(`Failed to check export status: ${error}`);
+        }
+    }
+
+    downloadExportedFile(reportId: any, exportId: any) {
+        // Download the exported file
+        fetch(`https://api.powerbi.com/v1.0/myorg/reports/${reportId}/exports/${exportId}/file`,
+        {
+            headers: {
+                "Authorization": "Bearer " + accessToken,
+                'Content-Type': 'application/json'
+            },
+        }).then(response => response.blob())
+        .then(blob => {
+          // Do something with the blob data, e.g. create a URL for downloading the file
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+
+            // Set the filename of the downloaded file
+            link.download = reportId +'.pdf';
+
+            // Append the link to the document body
+            document.body.appendChild(link);
+
+            // Trigger the download by clicking the link
+            link.click();
+            // Clean up by removing the link and revoking the URL
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }).catch(error => {
+            console.error(error);
+        });
     }
 }
 
