@@ -6,7 +6,7 @@
 import { AuthenticationResult, InteractionType, EventMessage, EventType, AuthError } from "@azure/msal-browser";
 import { MsalContext } from "@azure/msal-react";
 import React from "react";
-import { service, factories, models, IEmbedConfiguration } from "powerbi-client";
+import { service, factories, models, IEmbedConfiguration, Report } from "powerbi-client";
 import "./App.css";
 import * as config from "./Config";
 
@@ -17,6 +17,7 @@ let embedUrl = "";
 let reportContainer: HTMLElement;
 let reportRef: React.Ref<HTMLDivElement>;
 let loading: JSX.Element;
+let reportVar: Report;
 let status: string;
 let percentComplete;
 
@@ -29,6 +30,7 @@ class App extends React.Component<AppProps, AppState> {
 
     constructor(props: AppProps) {
         super(props);
+        this.exportReport = this.exportReport.bind(this);
 
         this.state = { accessToken: "", embedUrl: "", error: [] };
 
@@ -36,10 +38,12 @@ class App extends React.Component<AppProps, AppState> {
 
         // Report container
         loading = (
-            <div
+            <div><div
                 id="reportContainer"
                 ref={reportRef} >
                 Loading the report...
+            </div>
+                <button onClick={this.exportReport}> Export Report</button>
             </div>
         );
     }
@@ -73,6 +77,7 @@ class App extends React.Component<AppProps, AppState> {
             };
 
             const report = powerbi.embed(reportContainer, embedConfiguration);
+            reportVar = report as Report;
 
             // Clear any other loaded handler events
             report.off("loaded");
@@ -264,104 +269,115 @@ class App extends React.Component<AppProps, AppState> {
             welcome.innerText = "Welcome, " + username;
     }
 
-    exportReport() {
+    async exportReport() {
+        // Export the captured bookmark to PDF
+        // const capturedBookmark = await reportVar.bookmarksManager.capture();
         const settings = {
             format: 'PDF',
             powerBIReportConfiguration: {
-                defaultBookmark: {
-                        //    state: capturedBookmark.state
-                                }            }
+                // defaultBookmark: {
+                //     state: capturedBookmark.state
+                // },
+
+                // Export the report with the specified page name
+                // pages: [{ pageName: 'ReportSection3' }],
+
+                // Export the report with the specified reportFilter
+                // reportLevelFilters: [{
+                //     filter: "Store/Territory eq 'NC'"
+                // }]
+            }
         };
 
-        fetch(`https://api.powerbi.com/v1.0/myorg/reports/${config.reportId}/ExportTo` ,
+        await fetch(`https://api.powerbi.com/v1.0/myorg/reports/${config.reportId}/ExportTo`,
             {
                 method: 'POST',
                 headers: {
                     "Authorization": "Bearer " + accessToken,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ format: "pdf"})
+                body: JSON.stringify(settings)
             })
-            .then(response => response.json() )
+            .then(response => response.json())
             .then(data => {
 
-            const exportId = data.id;
-            const intervalId = setInterval(async () => {
-                // Check the status of the export
-                this.checkExportStatus(config.reportId,exportId);
+                const exportId = data.id;
+                const intervalId = setInterval(async () => {
+                    console.log("inside interval")
+                    // Check the status of the export
+                    this.checkExportStatus(config.reportId, exportId);
 
-                // Update the progress percentage
-                // percentComplete = exportStatus.percentComplete === 0 ? 1 : exportStatus.percentComplete;                // console.log("Inside if",exportStatus.percentComplete)                
-                if (status === 'Succeeded') {
-                  // If the export succeeded, download the exported file and reset the interval                  console.log("if passed calling download")
-                  this.downloadExportedFile(config.reportId,exportId);
+                    if (status === 'Succeeded') {
+                        // If the export succeeded, download the exported file and reset the interval
+                        this.downloadExportedFile(config.reportId, exportId);
+                        clearInterval(intervalId);
+                    }
+                    else if (status === 'Failed') {
+                        // If the export failed or is in an unknown state, reset the interval with an error message
+                        clearInterval(intervalId);
+                    }
+                }, 100);
 
-                  clearInterval(intervalId);
-                } else if (status !== 'Running') {
-                  // If the export failed or is in an unknown state, reset the interval with an error message                  console.log("else failed")
-                  clearInterval(intervalId);
-                }
-            }, 60);
-            // Set a timeout to reset the interval in case the export takes too long
-            setTimeout(() => {
-                clearInterval(intervalId);
-            }, 300000);
+                // Set a timeout to reset the interval in case the export takes too long
+                setTimeout(() => {
+                    clearInterval(intervalId);
+                }, 300000);
 
-        }).catch(error => {
-            console.error('Error:', error);
-        });
+            }).catch(error => {
+                console.error('Error:', error);
+            });
     }
 
-   checkExportStatus(reportId:any, exportId: string) {
+    checkExportStatus(reportId: string, exportId: string) {
         try {
             fetch(`https://api.powerbi.com/v1.0/myorg/reports/${reportId}/exports/${exportId}`,
-            {
-                headers: {
-                    "Authorization": "Bearer " + accessToken,
-                    'Content-Type': 'application/json'
-                },
-            }).then(response => response.json())
-            .then( data => {
-              // Do something with the JSON response data
-              percentComplete= data.percentComplete;
-              status = data.status;
-            }).catch(error => {
-              console.error(error);
-            });
+                {
+                    headers: {
+                        "Authorization": "Bearer " + accessToken,
+                        'Content-Type': 'application/json'
+                    },
+                }).then(response => response.json())
+                .then(data => {
+                    percentComplete = data.percentComplete;
+                    status = data.status;
+                }).catch(error => {
+                    console.error(error);
+                });
         } catch (error) {
             console.log(`Failed to check export status: ${error}`);
         }
     }
 
-    downloadExportedFile(reportId: any, exportId: any) {
-        // Download the exported file
+    // Download the exported file
+    downloadExportedFile(reportId: string, exportId: string) {
         fetch(`https://api.powerbi.com/v1.0/myorg/reports/${reportId}/exports/${exportId}/file`,
-        {
-            headers: {
-                "Authorization": "Bearer " + accessToken,
-                'Content-Type': 'application/json'
-            },
-        }).then(response => response.blob())
-        .then(blob => {
-          // Do something with the blob data, e.g. create a URL for downloading the file
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
+            {
+                headers: {
+                    "Authorization": "Bearer " + accessToken,
+                    'Content-Type': 'application/json'
+                },
+            }).then(response => response.blob())
+            .then(blob => {
+                // Create a URL for downloading the file
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
 
-            // Set the filename of the downloaded file
-            link.download = reportId +'.pdf';
+                // Set the filename of the downloaded file
+                link.download = reportId + '.pdf';
 
-            // Append the link to the document body
-            document.body.appendChild(link);
+                // Append the link to the document body
+                document.body.appendChild(link);
 
-            // Trigger the download by clicking the link
-            link.click();
-            // Clean up by removing the link and revoking the URL
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        }).catch(error => {
-            console.error(error);
-        });
+                // Trigger the download by clicking the link
+                link.click();
+
+                // Clean up by removing the link and revoking the URL
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }).catch(error => {
+                console.error(error);
+            });
     }
 }
 
