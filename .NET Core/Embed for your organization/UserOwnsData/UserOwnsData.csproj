@@ -9,9 +9,5 @@
     <PackageReference Include="Microsoft.Identity.Web" Version="1.1.0" />
     <PackageReference Include="Microsoft.Identity.Web.UI" Version="1.1.0" />
     <PackageReference Include="Microsoft.PowerBI.Api" Version="3.16.0" />
-    <PackageReference Include="Microsoft.AspNetCore.JsonPatch" Version="7.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="7.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="7.0.0" />
-    <PackageReference Include="System.Net.Http.Json" Version="7.0.0" />
   </ItemGroup>
 </Project>
