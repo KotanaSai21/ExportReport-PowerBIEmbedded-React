@@ -4,7 +4,9 @@
 // ----------------------------------------------------------------------------
 
 namespace UserOwnsData
-{
+{   
+    using System;
+    using Microsoft.AspNetCore.Authentication.OpenIdConnect;
     using Microsoft.AspNetCore.Authorization;
     using Microsoft.AspNetCore.Builder;
     using Microsoft.AspNetCore.Hosting;
@@ -20,7 +22,6 @@ namespace UserOwnsData
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
-            Configuration["AzureAd:Instance"] = Configuration["AzureAd:AuthorityUrl"];
         }
 
         public IConfiguration Configuration { get; }
@@ -28,31 +29,35 @@ namespace UserOwnsData
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddOptions();
+            // Configure session services
+        services.AddSession(options =>
+        {
+        options.Cookie.Name = ".YourApp.Session";
+        options.IdleTimeout = TimeSpan.FromMinutes(10);
+        options.Cookie.HttpOnly = true;
+        options.Cookie.IsEssential = true; // Make the session cookie essential
+        });
 
-            // Graph api base url
-            var graphBaseUrl = "https://graph.microsoft.com/v1.0";
+        services.AddDistributedMemoryCache(); // In-memory cache for development, consider using distributed cache in production
+    
+        string[] initialScopes = Configuration.GetValue<string>("DownstreamApi:Scopes")?.Split(' ');
 
-            // Graph scope for reading logged in user's info
-            var userReadScope = "user.read";
-
-            // List of scopes required
-            string[] initialScopes = new string[] { userReadScope };
-
-            services.AddMicrosoftIdentityWebAppAuthentication(Configuration)
-                .EnableTokenAcquisitionToCallDownstreamApi(initialScopes)
-                .AddMicrosoftGraph(graphBaseUrl, userReadScope)
-                .AddSessionTokenCaches();
-
+        services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
+        .AddMicrosoftIdentityWebApp(Configuration.GetSection("AzureAd"))
+        .EnableTokenAcquisitionToCallDownstreamApi(initialScopes)
+        .AddMicrosoftGraph(Configuration.GetSection("DownstreamApi"))
+        .AddInMemoryTokenCaches();
+        
+        services.AddRazorPages()
+        .AddMicrosoftIdentityUI();
+        services.AddMvc(options => options.EnableEndpointRouting = false);
             services.AddControllersWithViews(options =>
             {
                 var policy = new AuthorizationPolicyBuilder()
                     .RequireAuthenticatedUser()
                     .Build();
                 options.Filters.Add(new AuthorizeFilter(policy));
-            }).AddMicrosoftIdentityUI();
-
-            services.AddRazorPages();
+            });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -75,6 +80,7 @@ namespace UserOwnsData
             app.UseRouting();
 
             app.UseSession();
+            app.UseMvc();
 
             app.UseAuthentication();
             app.UseAuthorization();
