@@ -2,7 +2,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 // ----------------------------------------------------------------------------
-
 namespace UserOwnsData
 {
     using Microsoft.AspNetCore.Hosting;

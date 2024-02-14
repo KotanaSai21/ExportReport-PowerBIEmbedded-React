@@ -12,6 +12,8 @@ namespace UserOwnsData.Controllers
     using Microsoft.Graph;
     using System.Threading.Tasks;
     using UserOwnsData.Models;
+    using Microsoft.Extensions.DependencyInjection;
+    using System.Collections.Generic;
 
     [Authorize]
     public class HomeController : Controller
@@ -42,7 +44,12 @@ namespace UserOwnsData.Controllers
         public async Task<IActionResult> Embed()
         {
             // Generate token for the signed in user
-            var accessToken = await m_tokenAcquisition.GetAccessTokenForUserAsync(Configuration["AzureAd:Scopes:0"].Split(" "));
+            var m_tokenAcquisition = this.HttpContext.RequestServices
+                .GetRequiredService<ITokenAcquisition>();
+            string scopes = Configuration["AzureAd:Scopes"];
+            string tenantId = Configuration["AzureAd:TenantId"];
+
+            var accessToken = await m_tokenAcquisition.GetAccessTokenForUserAsync(scopes.Split(' '), tenantId);
 
             // Get username of logged in user
             var userInfo = await m_graphServiceClient.Me.Request().GetAsync();
